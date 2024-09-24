@@ -1,0 +1,52 @@
+net{1}=resnet18; net{2}=resnet50; net{3}=resnet101; net{4}=darknet19; net{5}=mobilenetv2;
+net{6}=darknet53; net{7}=xception(); net{8}=efficientnetb0(); net{9}=shufflenet();
+net{10}=nasnetmobile(); net{11}=nasnetlarge(); net{12}=densenet201();  net{13}= inceptionv3(); 
+ net{14} = inceptionresnetv2(); net{15}=googlenet(); net{16}=alexnet(); 
+net{17}=vgg16(); net{18}=vgg19(); net{19}=squeezenet();
+
+for od=1:19
+    layer{od}=net{od}.Layers(end-2).Name;
+    if od==15 || od==19
+        layer{19+od}=net{od}.Layers(end-4).Name;
+    elseif (od>=16 && od<=18)
+        layer{19+od}=net{od}.Layers(end-5).Name;
+    elseif od==4
+        layer{19+od}=net{od}.Layers(end-1).Name;
+    else
+        layer{19+od}=net{od}.Layers(end-3).Name;
+    end
+    inputSizeA = net{od}.Layers(1).InputSize;
+for k=1:length(dosya)
+    res=imread(dosya(k).name);
+    [ww,hh,ll]=size(res);
+    res=imresize(res,[224,224]);
+    if ll==1
+        res(:,:,1)=res(:,:,1); res(:,:,2)=res(:,:,1); res(:,:,3)=res(:,:,1);
+    end
+    augimdsTrainA = augmentedImageDatastore(inputSizeA(1:2),res);        
+            fm = activations(net{od},augimdsTrainA,layer{od},'OutputAs','rows');
+            fm1 = activations(net{od},augimdsTrainA,layer{19+od},'OutputAs','rows');
+            X(k,:)=[fm fm1];
+            y(k)=str2num(dosya(k).name(1));
+ end
+idx=relieff(X,y',10);
+for i=1:1000
+son{od}(:,i)=X(:,idx(i));
+end
+
+template = templateSVM(...
+    'KernelFunction', 'polynomial', ...
+    'PolynomialOrder', 3, ...
+    'KernelScale', 'auto', ...
+    'BoxConstraint', 1, ...
+    'Standardize', true);
+mdl = fitcecoc(...
+    son{od}, ...
+    y, ...
+    'Learners', template, ...
+    'Coding', 'onevsone', ...
+    'ClassNames', [1:2]');
+kk=crossval(mdl,'KFold',5);
+loss(od) = kfoldLoss(kk);
+clear X mdl xx idx
+end
